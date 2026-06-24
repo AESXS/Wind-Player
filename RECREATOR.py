@@ -1,0 +1,872 @@
+import flet as ft
+from pygame import mixer
+from time import time
+from random import randint
+from tinytag import TinyTag
+from pathlib import Path
+from asyncio import sleep
+from json import dump,load
+from module.manager import scan_files,scan_all,scan_detail,convert,unconvert
+
+
+#封面提取
+def album_get(path):
+    z=Path(path)
+    tag=TinyTag.get(z,image=True)
+    if tag.images.any:
+        return tag.images.any.data
+    else:
+        return None
+
+#初始化
+setting=[False,False,18,None,0,[],None]
+set_path=Path("set.json")
+if set_path.exists():
+    with open("set.json","r",encoding="utf-8") as log:
+        setting=load(log)
+
+
+        
+color_group=[ft.Colors.INDIGO_50,ft.Colors.INDIGO_100,ft.Colors.BLUE_50,ft.Colors.BLUE_100]
+        
+cursor=0        
+set_path=Path("log.json")
+if set_path.exists():
+    with open("log.json","r",encoding="utf-8") as log:
+        file_list=load(log)
+        index_list=file_list[0]
+        data_list=file_list[1]
+        tag_list=file_list[2]
+        artist_list=file_list[3]
+        album_list=file_list[4]
+        time_list=file_list[5]
+    music_list=tag_list[0]
+    mixer.init()
+    music_place=[i for i in range(0,len(data_list))]
+    
+    if setting[4]==1:
+        music_place.sort(key=lambda e: time_list[e])
+    elif setting[4]==2:
+        music_place.sort(key=lambda e: time_list[e])
+        music_place.reverse()
+    elif setting[4]==3:
+        music_place.sort(key=lambda e: music_list[e])
+    elif setting[4]==4:
+        music_place.sort(key=lambda e: music_list[e])
+        music_place.reverse()
+    
+    music_number=music_place[0]
+    exist_music=Path(data_list[music_place[0]])
+    while not exist_music.exists():
+        cursor+=1
+        exist_music=Path(data_list[music_place[cursor]])
+        music_number=music_place[cursor]
+    begin=True
+else:
+    begin=False
+
+
+
+
+def get_lyrics(num):
+    global lyrics_list,lyrics_number
+    z=Path(data_list[num])
+    lyrics_number=0
+    tag=TinyTag.get(z)
+    if "lyrics" in tag.other:
+        zeta=tag.other["lyrics"][0]
+        lyrics_list=zeta.splitlines()
+        lyrics_list=list(filter(lambda x:x !="" and x[1]=="0" and x[10:]!="" ,lyrics_list))
+    else:
+        lyrics_list=["[00:00.00]暂无歌词"]
+        
+#主程序
+async def main(wind: ft.Page):
+    global music_number,begin
+    global w,h
+    if setting[0]:
+        wind.theme_mode=ft.ThemeMode.DARK
+    wind.fonts={"rovin":setting[3],"kanit":setting[6]}
+    wind.theme=ft.Theme(font_family="kanit")
+    wind.window.title_bar_hidden=True
+    w=wind.window.width
+    h=wind.window.height
+    wind.window.spacing=0
+#初始化
+    def renew():        
+        global music_number
+        title_update(music_number)
+        mixer.music.load(data_list[music_number])
+        mixer.music.play()
+        if setting[0]:
+            lyrics_update_dark(music_number)
+        else:
+            lyrics_update(music_number)
+        alltime.value=convert(int(tag_list[4][music_number])*1000)
+        timer.max=int(tag_list[4][music_number])*1000
+        timer.value=0
+        wastetime.value="00:00"   
+        if not player.selected:
+            mixer.music.pause()
+        photo.content=ft.Image(src=album_get(data_list[music_number])
+                                     ,cache_width=1000,cache_height=1000,width=h*0.5,height=h*0.5,border_radius=22)
+        if setting[1]:
+            back.src=album_get(data_list[music_number])
+        wind.update()
+#完全初始化
+    def allnew():
+        global cursor,music_number,file_list,index_list,artist_list,data_list,tag_list,album_list,time_list,music_list,music_place
+        set_path=Path("log.json")
+        if set_path.exists():
+            with open("log.json","r",encoding="utf-8") as log:
+                file_list=load(log)
+                index_list=file_list[0]
+                data_list=file_list[1]
+                tag_list=file_list[2]
+                artist_list=file_list[3]
+                album_list=file_list[4]
+                time_list=file_list[5]
+            music_list=tag_list[0]
+            mixer.init()
+            music_place=[i for i in range(0,len(data_list))]    
+            if setting[4]==1:
+                music_place.sort(key=lambda e: time_list[e])
+            elif setting[4]==2:
+               music_place.sort(key=lambda e: time_list[e])
+               music_place.reverse()
+            elif setting[4]==3:
+                music_place.sort(key=lambda e: music_list[e])
+            elif setting[4]==4:
+                music_place.sort(key=lambda e: music_list[e])
+                music_place.reverse()    
+            music_number=music_place[0]
+            exist_music=Path(data_list[music_place[0]])
+            while not exist_music.exists():
+                cursor+=1
+                exist_music=Path(data_list[music_place[cursor]])
+                music_number=music_place[cursor]
+            now_update(music_place)
+            item_update()
+            album_update()
+            artist_update()
+            renew()
+            list_update(music_place)
+            wind.update()
+#播放列表
+    def now_update(place):
+        global now_list
+        now_list=[]
+        for i in range(len(place)):
+            now_list.append([place[i],i-1,i+1])
+        now_list.append([place[-1],-2%len(place),0])
+        
+    
+
+#导航栏
+    async def scroll(e):
+        await basis.jump_to_page(e.control.selected_index)
+        
+    navy=ft.NavigationRail(
+    selected_index=0,
+    height=h-100,
+    width=80,
+    bgcolor=color_group[0],
+    destinations=[
+        ft.NavigationRailDestination(icon=ft.Icons.MUSIC_NOTE, label="Music"),
+        ft.NavigationRailDestination(icon=ft.Icons.REORDER,label="Song List"),
+        ft.NavigationRailDestination(icon=ft.Icons.PERSON, label="Artist"),
+        ft.NavigationRailDestination(icon=ft.Icons.ALBUM, label="Album"),
+        ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="Setting")],
+    on_change=scroll)
+    
+#播放页面
+    #播放
+    async def play(e):
+        global music_number
+        player.selected=not player.selected
+        player.update()
+        if player.selected:
+            mixer.music.unpause() 
+            mixer.music.set_pos(timer.value*0.001)
+            await lyrics_sync()
+        else:
+            mixer.music.pause()
+    #切换
+    def flow(orient):
+        global music_number,cursor
+        wind.drawer.selected_index=cursor=now_list[cursor][orient]
+        music_number=now_list[cursor][0]
+        renew()
+        
+    #歌词
+    def lyrics_update(num):
+        lyrics_display.controls=[]
+        get_lyrics(num)
+        for i in range(0,len(lyrics_list)):
+            lyrics_display.controls.append(ft.ListTile(on_click=lyrics_choice,
+                                                       text_color=ft.Colors.BLACK,shape=ft.RoundedRectangleBorder(radius=20)
+                                                       ,selected_color=ft.Colors.WHITE,selected_tile_color=ft.Colors.GREY,
+                                                       title=ft.Text(lyrics_list[i].split("]")[1],
+                                                                     size=setting[2],color=ft.Colors.BLACK,font_family="rovin"),width=800,data=i))
+    def lyrics_update_dark(num):
+        lyrics_display.controls=[]
+        get_lyrics(num)
+        for i in range(0,len(lyrics_list)):
+            lyrics_display.controls.append(ft.ListTile(text_color=ft.Colors.WHITE,shape=ft.RoundedRectangleBorder(radius=20)
+                                                       ,selected_color=ft.Colors.WHITE,selected_tile_color=ft.Colors.GREY,
+                on_click=lyrics_choice,title=ft.Text(lyrics_list[i].split("]")[1],
+                                                     size=setting[2],color=ft.Colors.BLACK,font_family="rovin"),width=800,height=50,data=i))
+    #歌词选中
+    async def lyrics_choice(e):
+        global lyrics_number,h
+        z=lyrics_list[e.control.data]
+        mixer.music.set_pos(unconvert(z[1:9])*0.001)
+        timer.value=unconvert(z[1:9])
+        lyrics_display.controls[lyrics_number].selected=False
+        lyrics_number=e.control.data
+        lyrics_display.controls[lyrics_number].selected=True
+        await lyrics_display.scroll_to(offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0)
+                                 ,duration=100)
+    #歌词同步
+    async def lyrics_sync():
+        global lyrics_number,lyrics_list,h
+        last=int(time()*1000)
+        while player.selected==True:
+           await sleep(0.1)
+           if mixer.music.get_busy() or timer.value+int(time()*1000)-last<timer.max:
+               if timer.value+int(time()*1000)-last<timer.max:
+                  timer.value=timer.value+int(time()*1000)-last
+                  last=int(time()*1000)
+                  timer.update()
+                  wastetime.update()
+               else:
+                    modeking()
+           if navy.selected_index==0:
+               wastetime.value=convert(int(timer.value))
+               if lyrics_number<len(lyrics_list)-1:
+                   if unconvert(lyrics_list[lyrics_number+1][1:9])<timer.value:
+                       lyrics_display.controls[lyrics_number].selected=False
+                       lyrics_number=min(lyrics_number+1,len(lyrics_display.controls)-1)
+                       lyrics_display.controls[lyrics_number].selected=True
+                       await lyrics_display.scroll_to(
+                           offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0),duration=300)
+                       lyrics_display.update()
+    #进度条
+    async def time_use(e):
+        global lyrics_number,lyrics_list,h
+        mixer.music.set_pos(timer.value*0.001)
+        wastetime.value=convert(int(timer.value))
+        for i in range(len(lyrics_list)):
+            if unconvert(lyrics_list[i][1:9])<=timer.value:
+                lyrics_display.controls[lyrics_number].selected=False
+                lyrics_number=i
+                lyrics_display.controls[lyrics_number].selected=True
+                await lyrics_display.scroll_to(
+                    offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0)
+                                         ,duration=100)
+        lyrics_display.update()
+        wastetime.update()
+    #模式切换
+    def modeking():
+        global music_number
+        if mode.data==0:
+            flow(-1)
+        elif mode.data==1:
+            mixer.music.rewind()
+            timer.value=0
+        else:
+            mixer.music.pause()
+            player.selected=False
+            timer.value=0
+            player.update()
+    def mode_change(e):
+        n=[1,2,0]
+        p=[ft.Icons.SKIP_NEXT,ft.Icons.REPEAT_ONE,ft.Icons.PAUSE_CIRCLE]
+        e.control.data=n[e.control.data]
+        e.control.icon=p[e.control.data]
+        mode.update()
+        
+    #标签更新
+    def title_update(num):
+        title_group.title=ft.Text(music_list[num])
+        title_banner.content.controls[1].controls=[]
+        title_banner.content.controls[1].controls.append(ft.ListTile(leading=ft.Icon(ft.Icons.ALBUM),
+                                                            title=ft.Text(tag_list[2][num]),on_click=talbum_choice))
+        for i in tag_list[1][num]:
+           title_banner.content.controls[1].controls.append(ft.ListTile(leading=ft.Icon(ft.Icons.PERSON),
+                                                               title=ft.Text(i),on_click=tartist_choice))
+        title_banner.content.controls[1].controls.append(ft.ListTile(title=ft.Text("采样率&比特率"+str([tag_list[3][num]][0]))))
+        title_group.update()
+
+    async def tartist_choice(e):
+        artist_main.controls=[]  
+        for i in artist_list[e.control.title.value]:
+            artist_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))            
+        artist_photo.controls[0].src=album_get(data_list[i])
+        artist_photo.controls[1].content.controls[0].value=e.control.title.value
+        artist_page.update()
+        navy.selected_index=2
+        navy.update()
+        await basis.jump_to_page(2)
+        await page3.jump_to_page(1)
+        
+    async def talbum_choice(e):
+        album_main.controls=[]  
+        for i in album_list[e.control.title.value]:
+            album_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))
+        album_photo.controls[0].src=album_get(data_list[i])
+        album_photo.controls[1].content.controls[0].value=e.control.title.value
+        album_page.update()
+        navy.selected_index=3
+        navy.update()
+        await basis.jump_to_page(3)
+        await page4.jump_to_page(1)
+        
+    #随机播放
+    def on_shuffle():
+        global music_list,now_list,cursor
+        if not random_mode.selected:
+            for i in range(min(100,len(now_list))):
+                now_list[i].insert(0,now_list[randint(0,len(now_list)-1)][0])
+            item_update()
+        else:
+            for i in range(min(100,len(now_list))):
+                now_list[i].pop(0)
+            item_update()
+        cursor=0
+        random_mode.selected=not random_mode.selected
+        playitem.update()
+        random_mode.update()
+        
+    #播放列表
+    async def exp(e):
+        await wind.show_drawer()
+
+    def item_choice(e):
+        global music_number,cursor
+        cursor=e.control.selected_index
+        music_number=now_list[cursor][0]
+        renew()
+        
+    def item_update():
+        global now_list
+        wind.drawer.controls=[]
+        for i in now_list:
+           wind.drawer.controls.append(ft.NavigationDrawerDestination(label=music_list[i[0]],icon=ft.Icons.HEADPHONES))
+    #信息弹窗    
+    wind.drawer=ft.NavigationDrawer(controls=[],on_change=item_choice)
+    title_banner=ft.BottomSheet(content=ft.ListView([ft.Row([ft.Text("歌曲信息")],alignment=ft.MainAxisAlignment.CENTER),
+                                                   ft.ListView()]))
+    wind.add(title_banner)
+    
+    playitem=ft.IconButton(icon=ft.Icons.QUEUE_MUSIC,on_click=exp)
+    
+    
+    
+    #封装
+    timer=ft.Slider(on_change=time_use)
+
+    alltime=ft.Text()
+    wastetime=ft.Text()
+    
+    timers=ft.Container(content=timer,width=w*0.7,height=40)
+    
+    player=ft.IconButton(on_click=play,icon=ft.Icons.RADIO_BUTTON_UNCHECKED,
+                         selected_icon=ft.Icons.CHECK_BOX_OUTLINE_BLANK,selected=False,width=50,height=50)
+    
+    upper=ft.IconButton(on_click=lambda e: flow(-2),icon=ft.Icons.CHEVRON_LEFT,width=50,height=50)
+    
+    downer=ft.IconButton(on_click=lambda e: flow(-1),icon=ft.Icons.CHEVRON_RIGHT,width=50,height=50)
+
+    photo=ft.AnimatedSwitcher(content=ft.Image(src=""),transition=ft.AnimatedSwitcherTransition.FADE,
+        duration=200,reverse_duration=100)
+    
+    back=ft.Image(border_radius=22,filter_quality=ft.FilterQuality.LOW,src="")
+    
+
+    title_group=ft.ListTile(title=ft.Text(),width=h*0.5,height=40,on_click=lambda e:wind.show_dialog(title_banner))
+    
+    random_mode=ft.IconButton(icon=ft.Icons.SHUFFLE,selected_icon=ft.Icons.SHUFFLE_ON,on_click=lambda e:on_shuffle())
+    mode=ft.IconButton(data=0,icon=ft.Icons.SKIP_NEXT,on_click=mode_change)
+    lyrics_display=ft.ListView(width=w*0.55,height=h*0.5+140,scroll=ft.ScrollMode.HIDDEN)
+
+    control1=ft.Container(content=ft.Row([mode,random_mode,playitem],alignment=ft.MainAxisAlignment.CENTER),
+                          border_radius=22,
+                               blend_mode=ft.BlendMode.MODULATE,bgcolor=ft.Colors.GREY_100)
+    control2=ft.Container(content=ft.Row([upper,player,downer],alignment=ft.MainAxisAlignment.CENTER),
+                          border_radius=22,
+                               blend_mode=ft.BlendMode.MODULATE,bgcolor=ft.Colors.GREY_100)
+    
+    control3=ft.Container(content=ft.Row([title_group],alignment=ft.MainAxisAlignment.CENTER,width=h*0.5,height=40),
+                          border_radius=22)
+    
+    koss=ft.Container(border_radius=22,blend_mode=ft.BlendMode.MODULATE,
+                      bgcolor=ft.Colors.GREY_100,width=w-140,height=h-100)
+    
+    play_panel=ft.Column([ft.Row([ft.Column([control3,
+                                              photo,
+                                             control1,control2],
+                                            spacing=5,width=h*0.5,height=h*0.7,
+                                            alignment=ft.MainAxisAlignment.CENTER),lyrics_display],
+                      alignment=ft.MainAxisAlignment.CENTER),
+                          ft.Row([wastetime,timers,alltime],alignment=ft.MainAxisAlignment.CENTER),
+                          ])
+    
+    goss=ft.AnimatedSwitcher(content=ft.Stack([koss,play_panel]),width=w,height=h-100)
+    
+    if setting[1]:
+        goss.content.controls.insert(0,back)
+        koss.blur=ft.Blur(150,150, ft.BlurTileMode.MIRROR)
+       
+#列表页面
+    def list_choice(e):
+        global music_number,cursor,now_list
+        music_number=e.control.data
+        renew()
+        
+    def delete_true(e):
+        Path.unlink(Path(banner.content.value))
+        
+    def music_delete(e):
+        delete_banner.content.controls[1].title.value=data_list[e.control.data]
+        wind.show_dialog(delete_banner)
+
+    delete_banner=ft.BottomSheet(content=ft.ListView([ft.Row([ft.Text("删除")],alignment=ft.MainAxisAlignment.CENTER),
+                                                      ft.ListTile(title=ft.Text(""),bgcolor=ft.Colors.BLUE_100),
+                                                      ft.ListTile(title="确认",on_click=delete_true,bgcolor=ft.Colors.RED_100)]))
+    wind.add(delete_banner)
+        
+    def list_update(place):
+        playlist.controls=[]
+        for i in place:
+            playlist.controls.append(ft.ListTile(data=i,width=w-140,height=50,on_click=list_choice,title=ft.Text(music_list[i]),
+                                                 trailing=ft.PopupMenuButton(content=ft.Icon(ft.Icons.MENU),items=[
+                                                     ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.DELETE),ft.Text("删除")]),
+                                                                      on_click=music_delete,data=i)])))
+
+    #播放全部
+    def all_play(e):
+        global now_list,cursor,music_number
+        now_update(music_place)
+        item_update()
+        cursor=0
+        music_number=now_list[cursor][0]
+        renew()
+        
+    sword=ft.Container(content=ft.Row([ft.ListTile(title=ft.Icon(icon=ft.Icons.AUDIOTRACK),on_click=all_play,width=60)],
+                                      alignment=ft.MainAxisAlignment.CENTER),
+                     border_radius=15,width=60,height=44,
+                               bgcolor=color_group[3])
+
+    #歌曲搜索
+    async def search_choice(e):
+        global music_number
+        music_number=e.control.data
+        await search_button.close_view()
+        renew()
+        
+    async def search(e):
+        global music_list
+        e.control.controls=[]
+        e.control.controls.append(ft.ListTile(title=(ft.Text("歌曲")),height=40,bgcolor=color_group[3]))
+        for i in range(len(data_list)):
+            if e.data.lower() in music_list[i].lower():
+                e.control.controls.append(ft.ListTile(on_click=search_choice,title=(ft.Text(music_list[i]))
+                                                      ,height=40,data=i))
+        e.control.controls.append(ft.ListTile(title=(ft.Text("艺术家")),height=40,bgcolor=ft.Colors.color_group[3]))
+        for i in artist_list:
+            if e.data.lower() in i.lower():
+                e.control.controls.append(ft.ListTile(title=(ft.Text(i)),height=30,
+                                                   on_click=search_artist_choice))
+        e.control.controls.append(ft.ListTile(title=(ft.Text("专辑")),height=40,bgcolor=ft.Colors.color_group[3]))
+        for i in album_list:
+            if e.data.lower() in i.lower():
+                e.control.controls.append(ft.ListTile(title=(ft.Text(i)),height=30,
+                                                   on_click=search_album_choice))
+        await e.control.open_view()
+
+    search_button=ft.SearchBar(on_submit=search,height=40,width=300,full_screen=True,bar_hint_text="搜索")
+    
+    #搜索跳转页面
+    async def search_artist_choice(e):
+        await search_button.close_view()
+        artist_main.controls=[]  
+        for i in artist_list[e.control.title.value]:
+            artist_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))
+        artist_photo.controls[0].src=album_get(data_list[i])
+        artist_photo.controls[1].content.controls[0].value=e.control.title.value
+        artist_page.update()
+        navy.selected_index=2
+        navy.update()
+        await basis.jump_to_page(2)
+        await page3.jump_to_page(1)
+        
+    async def search_album_choice(e):
+        await search_button.close_view()
+        album_main.controls=[]  
+        for i in album_list[e.control.title.value]:
+            album_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))
+        album_photo.controls[0].src=album_get(data_list[i])
+        album_photo.controls[1].content.controls[0].value=e.control.title.value
+        album_page.update()
+        navy.selected_index=3
+        navy.update()
+        await basis.jump_to_page(3)
+        await page4.jump_to_page(1)
+
+
+    #排序方法
+    def order(a):
+        global music_place,music_list,setting,now_list
+        if a==0:
+            playlist.controls.sort(key=lambda e: e.data)
+        elif a==1:
+            playlist.controls.sort(key=lambda e: time_list[e.data])
+        elif a==2:
+            playlist.controls.sort(key=lambda e: time_list[e.data])
+            music_place.sort(key=lambda e: time_list[e])
+            playlist.controls.reverse()
+            music_place.reverse()
+        elif a==3:
+            music_place.sort(key=lambda e: music_list[e])
+            playlist.controls.sort(key=lambda e: music_list[e.data])
+        elif a==4:
+            playlist.controls.sort(key=lambda e: music_list[e.data])
+            playlist.controls.reverse()
+            music_place.sort(key=lambda e: music_list[e])
+            music_place.reverse()
+        now_update(music_place)
+        item_update()
+        setting[4]=a
+        
+    seque=ft.Container(ft.PopupMenuButton(content=ft.Icon(ft.Icons.LIST),items=[
+        ft.PopupMenuItem(content=ft.Text("按文件夹排序"),on_click=lambda e:order(0)),
+            ft.PopupMenuItem(content=ft.Text("按时间升序"),on_click=lambda e:order(1)),
+            ft.PopupMenuItem(content=ft.Text("按时间降序"),on_click=lambda e:order(2)),
+        ft.PopupMenuItem(content=ft.Text("按歌曲名升序"),on_click=lambda e:order(3)),
+        ft.PopupMenuItem(content=ft.Text("按歌曲名降序"),on_click=lambda e:order(4))]),
+                      bgcolor=color_group[1],border_radius=15,width=54,height=44)
+    
+        
+    playlist=ft.ListView(width=w-200,height=h-154,spacing=5,cache_extent=h-150)
+    
+    list_panel=ft.Column([ft.Container(content=ft.Row([search_button,sword,seque]),
+                                       width=w-140,bgcolor=color_group[0],height=44
+                                       ,border_radius=30)
+                          ,ft.Container(content=playlist,bgcolor=color_group[0],border_radius=22,width=w-140)
+                          ],width=w-140)
+
+#艺术家&专辑页面
+    
+    async def artist_choice(e):
+        artist_main.controls=[]  
+        for i in artist_list[e.control.title.value]:
+            artist_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))
+            
+        artist_photo.controls[0].src=album_get(data_list[i])
+        artist_photo.controls[1].content.controls[0].value=e.control.title.value
+        artist_page.update()
+        await page3.jump_to_page(1)
+        
+    async def album_choice(e):
+        album_main.controls=[]  
+        for i in album_list[e.control.title.value]:
+            album_main.controls.append(ft.ListTile(title=ft.Text(music_list[i]),on_click=list_choice,data=i))
+        album_photo.controls[0].src=album_get(data_list[i])
+        album_photo.controls[1].content.controls[0].value=e.control.title.value
+        album_page.update()
+        await page4.jump_to_page(1)
+
+    def artist_play(e):
+        global now_list,cursor,music_number
+        now_update(artist_list[artist_photo.controls[1].content.controls[0].value])
+        item_update()
+        cursor=0
+        music_number=now_list[cursor][0]
+        renew()
+
+    async def artist_back(e):
+        await page3.jump_to_page(0)
+        
+    def artist_update():
+        for i in artist_list:
+            artist_grid.controls.append(ft.ListTile(title=ft.Text(i),width=w-140,height=50,on_click=artist_choice))
+            
+    artist_grid=ft.ListView(width=w-140,height=h-154,spacing=5,cache_extent=h-100)
+    
+    artist_panel=ft.Column([ft.Container(content=ft.Row([ft.ListTile(leading=ft.Icon(icon=ft.Icons.PERSON),title=ft.Text("艺术家"))]),
+                                       width=w-140,bgcolor=color_group[1],height=44
+                                       ,border_radius=30)
+        ,ft.Container(content=artist_grid,bgcolor=color_group[0],border_radius=22,width=w-140)],
+                           width=w-140)
+    def album_update():
+        for i in album_list:
+            album_grid.controls.append(ft.ListTile(title=ft.Text(i),width=w-140,height=50,on_click=album_choice))
+            
+    album_grid=ft.ListView(width=w-140,height=h-154,spacing=5,cache_extent=h-100)
+
+    album_panel=ft.Column([
+        ft.Container(content=ft.Row([ft.ListTile(leading=ft.Icon(icon=ft.Icons.ALBUM),title=ft.Text("专辑"))]),
+                                       width=w-140,bgcolor=color_group[1],height=44
+                                       ,border_radius=30),
+                           ft.Container(content=album_grid,bgcolor=color_group[0],border_radius=22,width=w-140)],
+                           width=w-140)
+    
+    artist_main=ft.ListView(controls=[],height=h-100,width=w-h*0.6-160)
+    artist_photo=ft.Column([
+        ft.Image(src="",cache_width=1000,cache_height=1000,width=h*0.6,height=h*0.6,border_radius=22),
+        
+        ft.Container(content=ft.Row([ft.Text()],alignment=ft.MainAxisAlignment.CENTER),
+                     border_radius=22,width=h*0.6,height=50,
+                               bgcolor=color_group[1]),
+        ft.Container(content=ft.Row([ft.ListTile(height=50,width=h*0.3
+                                                                     ,title=ft.Icon(icon=ft.Icons.CHEVRON_LEFT),
+                                                                     on_click=artist_back),
+                                     ft.ListTile(height=50,width=h*0.3,title=ft.Text("播放此列表"),on_click=artist_play,
+                                                 bgcolor=color_group[3])],
+                                    alignment=ft.MainAxisAlignment.CENTER,spacing=0),border_radius=22,width=h*0.6,height=50,
+                               bgcolor=color_group[2]),
+        ],width=h*0.6,height=h-100,alignment=ft.MainAxisAlignment.START)
+    
+    
+
+    def album_play(e):
+        global now_list,cursor,music_number
+        now_update(album_list[album_photo.controls[1].content.controls[0].value])
+        item_update()
+        cursor=0
+        music_number=now_list[cursor][0]
+        renew()
+
+    async def album_back(e):
+        await page4.jump_to_page(0)
+
+
+    album_main=ft.ListView(controls=[],height=h-100,width=w-h*0.6-160)
+
+    album_photo=ft.Column([
+        ft.Image(src="",cache_width=1000,cache_height=1000,width=h*0.6,height=h*0.6,border_radius=22),
+        
+        ft.Container(content=ft.Row([ft.Text()],alignment=ft.MainAxisAlignment.CENTER),
+                     border_radius=22,width=h*0.6,height=50,
+                               bgcolor=color_group[1]),
+        ft.Container(content=ft.Row([ft.ListTile(height=50,width=h*0.3
+                                                                     ,title=ft.Icon(icon=ft.Icons.CHEVRON_LEFT),
+                                                                     on_click=album_back),
+                                     ft.ListTile(height=50,width=h*0.3,title=ft.Text("播放此列表"),on_click=album_play,
+                                                 bgcolor=color_group[3])],
+                                    alignment=ft.MainAxisAlignment.CENTER),border_radius=22,width=h*0.6,height=50,
+                               bgcolor=color_group[2]),
+        ],width=h*0.6,height=h-100,alignment=ft.MainAxisAlignment.START)
+
+    artist_page=ft.Column([ft.Container(content=ft.Row([artist_photo,artist_main]),
+                             bgcolor=color_group[0],border_radius=22,width=w-140,height=h-100)],width=w-140,height=h-100)
+
+    album_page=ft.Column([ft.Container(content=ft.Row([album_photo,album_main]),
+                             bgcolor=color_group[0],border_radius=22,width=w-140,height=h-100)],width=w-140,height=h-100)
+
+
+#设置页面
+    #文件夹管理
+    async def load_file(e):
+        tar=await ft.FilePicker().get_directory_path()
+        if tar:
+            target_list=scan_files(tar)
+            for i in scan_all(target_list):
+                if type(i)==int:
+                    scanner.subtitle.value=i/len(target_list)
+                    scanner.update()
+                else:
+                    if i!=None:
+                        with open("log.json","w",encoding="utf-8") as file:
+                            dump(i,file)
+                    file.close()
+            allnew()
+            scanner.subtitle.value=1
+            scanner.update()
+            
+    #高斯模糊     
+    def gkos(e):
+        global setting
+        if e.control.value:
+            back.src=photo.content.src
+            goss.content.controls.insert(0,ft.Row([back]))
+            koss.blur=ft.Blur(150,150, ft.BlurTileMode.MIRROR)
+        else:
+            if len(goss.content.controls)>=2:
+                goss.content.controls.pop(0)
+                koss.blur=None
+        setting[1]=e.control.value
+        goss.update()
+    
+    koss_open=ft.ListTile(leading=ft.Icon(ft.Icons.BLUR_ON)
+                          ,title=ft.Text("歌词界面是否打开高斯模糊"),trailing=ft.Switch(value=setting[1],on_change=gkos))
+    
+    scanner=ft.ListTile(leading=ft.Icon(ft.Icons.FOLDER),
+                        title=ft.Text("载入音乐文件夹"),on_click=load_file,subtitle=ft.ProgressBar(value=0))
+    #文件夹重载
+    async def rescan(e):
+        target_list=[Path(i[0]) for i in index_list]
+        for i in scan_all(target_list):
+            if type(i)==int:
+                recheck.subtitle.value=i/len(target_list)
+                recheck.update()
+            else:
+                if i!=None:
+                    with open("log.json","w",encoding="utf-8") as file:
+                        dump(i,file)
+                file.close()
+                allnew()
+                recheck.subtitle.value=1
+                recheck.update()
+        
+    recheck=ft.ListTile(leading=ft.Icon(ft.Icons.REFRESH),
+                        title=ft.Text("重新扫描文件"),on_click=rescan,subtitle=ft.ProgressBar(value=0))
+    
+    #字体大小调节
+    def font_size(a):
+        global setting,music_number
+        if a==0:
+            setting[2]-=1
+        else:
+            setting[2]+=1
+        fonter.title.controls[2].value=setting[2]
+        lyrics_update(music_number)
+        fonter.update()
+        
+    fonter=ft.ListTile(leading=ft.Icon(ft.Icons.FORMAT_SIZE),title=ft.Row([ft.Text("歌词文字大小调节")
+                                      ,ft.IconButton(icon=ft.Icons.CHEVRON_LEFT,on_click=lambda e: font_size(0)),
+                            ft.Text(value=str(setting[2])),ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT,on_click=lambda e: font_size(1))]))
+    #字体更换
+    def font_trans(e):
+        global setting,music_number
+        setting[3]=None
+        setting[6]=None
+        wind.fonts={"kevin":None,"Kanit":None}
+        lyrics_update(music_number)
+        wind.update()
+        
+    re_font=ft.ListTile(leading=ft.Icon(ft.Icons.FORMAT_CLEAR),
+                        title=ft.Text("恢复默认字体"),on_click=font_trans,trailing=ft.Text("重启后生效"))
+    
+    async def font_lyrics(e):
+        global setting,music_number
+        var=await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.CUSTOM,allowed_extensions=["ttf","TTF","otf"])
+        if var!=None:
+            setting[3]=var[0].path
+            wind.fonts={"rovin":setting[3],"Kanit":setting[6]}
+            lyrics_update(music_number)
+            wind.update()
+        
+    lyrics_font=font_tran=ft.ListTile(title=ft.Text("设置歌词字体"),leading=ft.Icon(ft.Icons.SUBJECT),
+                            on_click=font_lyrics)
+    
+    async def font_change(e):
+        global setting,music_number
+        var=await ft.FilePicker().pick_files(file_type=ft.FilePickerFileType.CUSTOM,allowed_extensions=["ttf","TTF","otf"])
+        if var!=None:
+            setting[6]=var[0].path
+            wind.fonts={"rovin":setting[3],"Kanit":setting[6]}
+            wind.theme=ft.Theme(font_family="kanit")
+            lyrics_update(music_number)
+            wind.update()
+        
+
+    font_tran=ft.ListTile(title=ft.Text("设置全局字体"),leading=ft.Icon(ft.Icons.FONT_DOWNLOAD),
+                            on_click=font_change)
+    #黑色模式
+    def dark(e):
+        global setting,music_number
+        if e.control.value:
+            wind.theme_mode=ft.ThemeMode.DARK
+            lyrics_update_dark(music_number)
+        else:
+            wind.theme_mode=ft.ThemeMode.LIGHT
+            lyrics_update(music_number)
+        setting[0]=e.control.value
+        wind.update()
+        
+    darkness=ft.ListTile(leading=ft.Icon(ft.Icons.DARK_MODE),title=ft.Text("深色模式"),trailing=ft.Switch(value=setting[0],on_change=dark))
+        
+    #配色调节
+    colorer=ft.ListTile(leading=ft.Icon(ft.Icons.COLOR_LENS),trailing=ft.Text("重启后生效"),
+                                        title=ft.Row([ft.Text("配色方案"),
+                                                      ft.IconButton(icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.INDIGO_100)]))
+
+    setting_panel=ft.Column([ft.Container(content=ft.Column([ft.ListTile(title=ft.Text("设置")),scanner,recheck,darkness
+                                                             ,koss_open,
+                                                             fonter,font_tran,lyrics_font,re_font,colorer]),
+                             bgcolor=color_group[0],border_radius=22,width=w-140,height=h-100)],width=w-140,height=h-100)
+
+#三键导航
+    def mini(e):
+        wind.window.minimized=True
+        wind.update()
+        
+    def maxc(e):
+        e.control.selected=not e.control.selected
+        if e.control.selected:
+            wind.window.maximized=True 
+        else:
+            wind.window.maximized=False
+        wind.update()
+        
+    async def close(e):
+        await wind.window.close()
+        with open("set.json","w",encoding="utf-8") as file:
+            dump(setting,file)
+        quit()
+        
+    xiao=ft.IconButton(icon=ft.Icons.RADIO_BUTTON_OFF,on_click=mini)
+    qu=ft.IconButton(icon=ft.Icons.CLOSE,on_click=close)
+    da=ft.IconButton(icon=ft.Icons.CROP_DIN,selected_icon="CROP_FREE",on_click=maxc)
+#快捷键
+    async def on_key(e):
+        global music_number
+        if navy.selected_index==0:
+            if e.key==" ":
+                await play(e)
+            elif e.key=="Page Down":
+                flow(-1)
+            elif e.key=="Page Up":
+                flow(-2)
+            elif e.key=="Q":
+                on_shuffle()
+            
+    wind.on_keyboard_event=on_key
+    
+#功能栏
+    task_line=ft.Container(content=ft.Row([xiao,da,qu],alignment=ft.MainAxisAlignment.END,height=40,width=w-50),
+                           bgcolor=color_group[0],border_radius=22)
+    area=ft.WindowDragArea(ft.Container(task_line),maximizable=False)
+    
+    
+    
+    
+#封装
+    page1=ft.ListView(controls=[goss],height=wind.window.height,width=wind.window.width-150)
+    page2=ft.ListView(controls=[list_panel],height=wind.window.height,width=wind.window.width-150)
+    page3=ft.PageView([artist_panel,artist_page],width=wind.window.width-80,selected_index=0,horizontal=False)
+    page4=ft.PageView([album_panel,album_page],width=wind.window.width-80,selected_index=0,horizontal=False)
+    page5=ft.ListView(controls=[setting_panel],
+                      height=wind.window.height,width=wind.window.width-80)
+    
+    
+
+    basis=ft.PageView([page1,page2,page3,page4,page5],width=wind.window.width-80,horizontal=True,selected_index=0)
+    wind.add(ft.Column([area,ft.Row(controls=[ft.Column([ft.Container(content=navy,border_radius=20)],
+                                        alignment=ft.MainAxisAlignment.START),
+                              basis],width=wind.window.width,height=wind.window.height)]))
+    if begin:
+        now_update(music_place)
+        item_update()
+        album_update()
+        artist_update()
+        renew()
+        list_update(music_place)
+    else:
+        await basis.jump_to_page(4)
+        navy.selected_index=4
+        navy.update()
+
+ft.run(main)
