@@ -11,7 +11,7 @@ def scan_files(path):
     albums={}
     time=[]
     for i in files.rglob("*"):
-        if i.suffix in [".mp3",".flac",".wav"]:
+        if i.suffix in [".mp3",".flac",".wav",".ogg",".m4a"]:
             if i.stat().st_size>100:
                 if i.parent not in file_place:
                     file_place.append(i.parent)
@@ -20,7 +20,7 @@ def scan_files(path):
 
 def scan_detail(files):
     for i in files.rglob("*"):
-        if i.suffix in [".mp3",".flac",".wav"]:
+        if i.suffix in [".mp3",".flac",".wav",".ogg",".m4a"]:
             if i.stat().st_size>100:
                 time=(i.stat().st_mtime)
                 tag=TinyTag.get(i)
@@ -66,9 +66,11 @@ def scan_all(place):
                     albums[z[3]].append(index)
             index+=1
         index_place[-1].append(index-1)
-        yield(i)
     data=[index_place,data_place,tage,artists,albums,time]
-    yield(data)
+    if index_place!=[]:
+        return(data)
+    else:
+        return(None)
 
 
 #时间转换    
