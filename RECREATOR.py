@@ -19,25 +19,26 @@ def album_get(path):
         return "assets/images/nothing.jpg"
 
 #初始化
-setting=[False,False,18,None,0,[],None,True,0,False,0]
+setting=[False,False,18,None,0,[],None,True,0,False,0,False]
 set_path=Path("set.json")
 if set_path.exists():
     with open("set.json","r",encoding="utf-8") as log:
         setting=load(log)
-
 
         
 text_group_list=[["播放界面","歌曲列表","艺术家","专辑","设置","采样率&比特率","暂无歌词","A","B","删除",
                   "歌曲","搜索","简体中文","语言/language","按文件夹排序","按时间升序","按时间降序","按歌曲名升序","按歌曲名降序",
                   "播放此列表","歌词界面是否打开高斯模糊","无色歌词界面","歌词界面更加通透",
                   "载入音乐文件夹","重新扫描文件","歌词文字大小调节","恢复默认字体","重启后生效","设置歌词字体","设置全局字体",
-                  "深色模式","配色方案","限制列表长度","极速模式","版本号:1.00"],
+                  "深色模式","配色方案","限制列表长度","极速模式","版本号:1.00","祈祷中!出现错误(QAQ)","液态按钮",
+                  "欢迎使用Wind player! 请先完成以下设置","即刻体验"],
                  ["playing","playlist","artsit","album","setting","Sampling rate&bit rate","not have lyrics","A",
                   "B","search","song","artsit","English","language/语言","order with folder","order with time",
                   "descending order with time","order with name","descending order with name",
                   "play this list","koss blur mode","pure lyrics interface","more transparent interface",
                   "load music folder","rescan files","set lyrics font size","reset font type","restart to use","set lyrics font","set font",
-                  "dark mode","color palette","limit list length","fast mode","version:1.00"]]
+                  "dark mode","color palette","limit list length","fast mode","version:1.00","error","liquid button",
+                  "welcome to use Windplayer! Please achive the trailing setting","into play"]]
 
 text_group=text_group_list[setting[10]]
 
@@ -75,16 +76,16 @@ if set_path.exists():
     
     music_number=music_place[0]
     exist_music=Path(data_list[music_place[0]])
+    begin=True
     while not exist_music.exists():
+        if cursor>=len(music_place)-1:
+            begin=False
+            break
         cursor+=1
         exist_music=Path(data_list[music_place[cursor]])
         music_number=music_place[cursor]
-    begin=True
 else:
     begin=False
-
-
-
 
 def get_lyrics(num):
     global lyrics_list,lyrics_number
@@ -102,7 +103,13 @@ def get_lyrics(num):
 async def main(wind: ft.Page):
     global music_number,begin
     global w,h
+    if setting[0]:
+        wind.theme_mode=ft.ThemeMode.DARK
+        navy.bgcolor=ft.Colors.BLACK
+    else:
+        wind.theme_mode=ft.ThemeMode.LIGHT
     ft.FletApp.assets_dir="assets/"
+    wind.window.icon="assets/icon_windows.ico"
     wind.fonts={"rovin":setting[3],"kanit":setting[6]}
     wind.theme=ft.Theme(font_family="kanit")
     wind.window.title_bar_hidden=True
@@ -179,15 +186,13 @@ async def main(wind: ft.Page):
     def now_update(place):
         global now_list
         now_list=[]
-        for i in range(len(place)):
+        for i in range(len(place)-1):
             now_list.append([place[i],i-1,i+1])
         now_list.append([place[-1],-2%len(place),0])
         
 #导航栏
     async def scroll(e):
-        global begin
-        if begin:
-            await basis.jump_to_page(e.control.selected_index)
+        await basis.jump_to_page(e.control.selected_index)
         
     navy=ft.NavigationRail(selected_index=0,height=h-90,width=80,bgcolor=color_group[0],
             destinations=[
@@ -227,7 +232,7 @@ async def main(wind: ft.Page):
                                                        text_color=ft.Colors.BLACK,shape=ft.RoundedRectangleBorder(radius=20)
                                                        ,selected_color=ft.Colors.WHITE,selected_tile_color=ft.Colors.GREY,
                                                        title=ft.Text(lyrics_list[i].split("]")[1],
-                                                                     size=setting[2],color=ft.Colors.BLACK,font_family="rovin"),data=i))
+                                                        size=setting[2],color=ft.Colors.BLACK,font_family="rovin"),height=setting[2]*2.5,data=i))
     def lyrics_update_dark(num):
         lyrics_display.controls=[]
         get_lyrics(num)
@@ -235,7 +240,7 @@ async def main(wind: ft.Page):
             lyrics_display.controls.append(ft.ListTile(text_color=ft.Colors.WHITE,shape=ft.RoundedRectangleBorder(radius=20)
                                                        ,selected_color=ft.Colors.WHITE,selected_tile_color=ft.Colors.GREY,
                 on_click=lyrics_choice,title=ft.Text(lyrics_list[i].split("]")[1],
-                                                     size=setting[2],color=ft.Colors.WHITE,font_family="rovin"),height=50,data=i))
+                                                     size=setting[2],color=ft.Colors.WHITE,font_family="rovin"),height=setting[2]*2.5,data=i))
     #歌词选中
     async def lyrics_choice(e):
         global lyrics_number,h
@@ -245,7 +250,7 @@ async def main(wind: ft.Page):
         lyrics_display.controls[lyrics_number].selected=False
         lyrics_number=e.control.data
         lyrics_display.controls[lyrics_number].selected=True
-        await lyrics_display.scroll_to(offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0)
+        await lyrics_display.scroll_to(offset=max(lyrics_number*(setting[2]*2.5)-0.5*((h*0.7)),0)
                                  ,duration=100)
     #歌词同步
     async def lyrics_sync():
@@ -253,8 +258,8 @@ async def main(wind: ft.Page):
         last=int(time()*1000)
         while player.selected==True:
            await sleep(0.1)
-           if mixer.music.get_busy() or timer.value+int(time()*1000)-last<timer.max:
-               if timer.value+int(time()*1000)-last<timer.max:
+           if mixer.music.get_busy():
+               if timer.value+int(time()*1000)-last<timer.max-100:
                   timer.value=timer.value+int(time()*1000)-last
                   last=int(time()*1000)
                   timer.update()
@@ -269,7 +274,7 @@ async def main(wind: ft.Page):
                        lyrics_number=min(lyrics_number+1,len(lyrics_display.controls)-1)
                        lyrics_display.controls[lyrics_number].selected=True
                        await lyrics_display.scroll_to(
-                           offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0),duration=300)
+                           offset=max(lyrics_number*(setting[2]*2.5)-0.5*((h*0.7)),0),duration=300)
                        lyrics_display.update()
     #进度条
     async def time_use(e):
@@ -281,8 +286,7 @@ async def main(wind: ft.Page):
                 lyrics_display.controls[lyrics_number].selected=False
                 lyrics_number=i
                 lyrics_display.controls[lyrics_number].selected=True
-                await lyrics_display.scroll_to(
-                    offset=max(lyrics_number*(setting[2]+30)-(setting[2]+15)*((h*0.7)//(setting[2]*2+30)),0)
+                await lyrics_display.scroll_to(offset=max(lyrics_number*(setting[2]*2.5)-0.5*((h*0.7)),0)
                                          ,duration=100)
         lyrics_display.update()
         wastetime.update()
@@ -327,6 +331,8 @@ async def main(wind: ft.Page):
         artist_page.update()
         navy.selected_index=2
         navy.update()
+        title_banner.open=False
+        title_banner.update()
         await basis.jump_to_page(2)
         await page3.jump_to_page(1)
         
@@ -339,6 +345,8 @@ async def main(wind: ft.Page):
         album_page.update()
         navy.selected_index=3
         navy.update()
+        title_banner.open=False
+        title_banner.update()
         await basis.jump_to_page(3)
         await page4.jump_to_page(1)
         
@@ -469,9 +477,14 @@ async def main(wind: ft.Page):
     
     if setting[1]:
         goss.content.controls.insert(0,back)
-        koss.blur=ft.Blur(150,150, ft.BlurTileMode.MIRROR)
+        koss.blur=ft.Blur(100,100, ft.BlurTileMode.CLAMP)
     if setting[9]:
         koss.bgcolor=ft.Colors.GREY_50
+        koss.blur=ft.Blur(200,100, ft.BlurTileMode.REPEATED)
+    if setting[11]:
+        control1.blend_mode=ft.BlendMode.OVERLAY
+        control2.blend_mode=ft.BlendMode.OVERLAY
+        
        
 #列表页面
     def list_choice(e):
@@ -480,14 +493,17 @@ async def main(wind: ft.Page):
         renew()
         
     def delete_true(e):
-        Path.unlink(Path(banner.content.value))
+        global music_place,delete_bool
+        Path.unlink(Path(delete_banner.content.title.value))
+        delete_banner.open=False
+        delete_banner.update()
         
     def music_delete(e):
-        delete_banner.content.controls[0].title.value=data_list[e.control.data]
         wind.show_dialog(delete_banner)
 
-    delete_banner=ft.BottomSheet(content=ft.ListView([ft.ListTile(title=ft.Text("")),
-                                                      ft.ListTile(title=text_group[9],on_click=delete_true,bgcolor=ft.Colors.RED_100)]))
+    delete_banner=ft.AlertDialog(content=ft.ListTile(title=ft.Text("")),actions=[
+                                                      ft.Container(border_radius=22,content=ft.ListTile(title=text_group[9],
+                                                                                       on_click=delete_true,bgcolor=ft.Colors.RED_100))])
     wind.add(delete_banner)
         
     def list_update(place):
@@ -496,7 +512,7 @@ async def main(wind: ft.Page):
             playlist.controls.append(ft.ListTile(data=i,width=w-140,height=50,on_click=list_choice,title=ft.Text(music_list[i]),
                                                  trailing=ft.PopupMenuButton(content=ft.Icon(ft.Icons.MENU),items=[
                                                      ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.DELETE),ft.Text(text_group[9])]),
-                                                                      on_click=music_delete,data=i)])))
+                                                                 on_click=music_delete,data=i)])))
     def list_update_fast(place):
         playlist.controls=[]
         for i in place[0:min(len(place),100)]:
@@ -504,6 +520,7 @@ async def main(wind: ft.Page):
                                                  trailing=ft.PopupMenuButton(content=ft.Icon(ft.Icons.MENU),items=[
                                                      ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.DELETE),ft.Text(text_group[9])]),
                                                                       on_click=music_delete,data=i)])))
+            
 
     #播放全部
     def all_play(e):
@@ -661,6 +678,7 @@ async def main(wind: ft.Page):
         await page3.jump_to_page(0)
         
     def artist_update():
+        artist_grid.controls=[]
         for i in artist_list:
             artist_grid.controls.append(ft.ListTile(title=ft.Text(i),on_click=artist_choice))
             
@@ -674,6 +692,7 @@ async def main(wind: ft.Page):
                       content=artist_grid,bgcolor=color_group[0],border_radius=22,width=w-120)])
     
     def album_update():
+        album_grid.controls=[]
         for i in album_list:
             album_grid.controls.append(ft.ListTile(title=ft.Text(i),on_click=album_choice))
             
@@ -690,21 +709,15 @@ async def main(wind: ft.Page):
     artist_main=ft.ListView(controls=[],height=h-90,width=w-h*0.6-130)
     artist_photo=ft.Column([
         ft.Image(src="",cache_width=1000,cache_height=1000,width=h*0.6,height=h*0.6,border_radius=22),
-        
         ft.Container(blend_mode=ft.BlendMode.MODULATE,content=ft.Row([ft.Text()],alignment=ft.MainAxisAlignment.CENTER),
-                     border_radius=22,width=h*0.6,height=50,
-                               bgcolor=color_group[1]),
+                     border_radius=22,width=h*0.6,height=50,bgcolor=color_group[1]),
         ft.Container(blend_mode=ft.BlendMode.MODULATE,content=ft.Row([ft.ListTile(height=50,width=h*0.3
-                                                                     ,title=ft.Icon(icon=ft.Icons.CHEVRON_LEFT),
-                                                                     on_click=artist_back),
-                                     ft.ListTile(height=50,width=h*0.3,title=ft.Text(text_group[19]),on_click=artist_play,
-                                                 bgcolor=color_group[3])],
+                                                                     ,title=ft.Icon(icon=ft.Icons.CHEVRON_LEFT),on_click=artist_back),
+        ft.ListTile(height=50,width=h*0.3,title=ft.Text(text_group[19]),on_click=artist_play,bgcolor=color_group[3])],
                                     alignment=ft.MainAxisAlignment.CENTER,spacing=0),border_radius=22,width=h*0.6,height=50,
                                bgcolor=color_group[2]),
-        ],width=h*0.6,height=h-100,alignment=ft.MainAxisAlignment.START)
+        ],alignment=ft.MainAxisAlignment.START)
     
-    
-
     def album_play(e):
         global now_list,cursor,music_number
         now_update(album_list[album_photo.controls[1].content.controls[0].value])
@@ -734,9 +747,7 @@ async def main(wind: ft.Page):
                                      ft.ListTile(height=50,width=h*0.3,title=ft.Text(text_group[19]),on_click=album_play,
                                                  bgcolor=color_group[3])],
                                     alignment=ft.MainAxisAlignment.CENTER),border_radius=22,width=h*0.6,height=50,
-                               bgcolor=color_group[2]),
-        
-        ],width=h*0.6,height=h-100,alignment=ft.MainAxisAlignment.START)
+                               bgcolor=color_group[2])],alignment=ft.MainAxisAlignment.START)
 
     artist_page=ft.Column([ft.Container(blend_mode=ft.BlendMode.MODULATE,content=ft.Row([artist_photo,artist_main]),
                              bgcolor=color_group[0],border_radius=22,width=w-120,height=h-90)])
@@ -747,6 +758,8 @@ async def main(wind: ft.Page):
 
 #设置页面
     #文件夹管理
+    warning=ft.BottomSheet(content=ft.ListTile(title=ft.Text(value=text_group[35]),bgcolor=ft.Colors.RED_100))
+    wind.add(warning)
     async def load_file(e):
         tar=await ft.FilePicker().get_directory_path()
         scanner.subtitle.value=None
@@ -761,14 +774,22 @@ async def main(wind: ft.Page):
                 allnew()
                 scanner.subtitle.value=1
                 scanner.update()
-            
+            else:
+                wind.show_dialog(warning)
+                scanner.subtitle.value=0
+                scanner.update()
+                
+   
     #高斯模糊     
     def gkos(e):
         global setting
         if e.control.value:
             back.src=photo.content.src
             goss.content.controls.insert(0,ft.Row([back]))
-            koss.blur=ft.Blur(150,150, ft.BlurTileMode.MIRROR)
+            if setting[9]:
+                koss.blur=ft.Blur(200,100, ft.BlurTileMode.REPEATED)
+            else:
+                koss.blur=ft.Blur(100,100, ft.BlurTileMode.CLAMP)
         else:
             if len(goss.content.controls)>=2:
                 goss.content.controls.pop(0)
@@ -780,8 +801,13 @@ async def main(wind: ft.Page):
         global setting
         if e.control.value:
             koss.bgcolor=ft.Colors.GREY_50
+            if setting[1]:
+                koss.blur=ft.Blur(200,100, ft.BlurTileMode.REPEATED)
         else:
             koss.bgcolor=color_group[setting[8]]
+            if setting[1]:
+                koss.blur=ft.Blur(100,100, ft.BlurTileMode.CLAMP)
+            
         setting[9]=e.control.value
         koss.update()
         
@@ -795,19 +821,39 @@ async def main(wind: ft.Page):
     
     scanner=ft.ListTile(leading=ft.Icon(ft.Icons.FOLDER),
                         title=ft.Text(text_group[23]),on_click=load_file,subtitle=ft.ProgressBar(value=0))
+    #液态按钮
+    def liquid_on(e):
+        global setting
+        if e.control.value:
+            control1.blend_mode=ft.BlendMode.OVERLAY
+            control2.blend_mode=ft.BlendMode.OVERLAY
+        else:
+            control1.blend_mode=ft.BlendMode.MODULATE
+            control2.blend_mode=ft.BlendMode.MODULATE            
+        setting[11]=e.control.value
+
+    liquid_open=ft.ListTile(leading=ft.Icon(ft.Icons.MOTION_PHOTOS_ON)
+                          ,title=ft.Text(text_group[36]),trailing=ft.Switch(value=setting[11],on_change=liquid_on))
     #文件夹重载
     async def rescan(e):
-        target_list=[Path(i[0]) for i in index_list]
-        recheck.subtitle.value=None
-        recheck.update()
-        zeta=scan_all(target_list)    
-        if zeta!=None:
-            with open("log.json","w",encoding="utf-8") as file:
-                dump(zeta,file)
-                file.close()
-            allnew()
-            recheck.subtitle.value=1
+        if begin:
+            target_list=[Path(i[0]) for i in index_list]
+            recheck.subtitle.value=None
             recheck.update()
+            zeta=scan_all(target_list)    
+            if zeta!=None:
+                with open("log.json","w",encoding="utf-8") as file:
+                    dump(zeta,file)
+                    file.close()
+                allnew()
+                recheck.subtitle.value=1
+                recheck.update()
+            else:
+                wind.show_dialog(warning)
+                scanner.subtitle.value=0
+                scanner.update()
+        else:
+            wind.show_dialog(warning)
         
     recheck=ft.ListTile(leading=ft.Icon(ft.Icons.REFRESH),
                         title=ft.Text(text_group[24]),on_click=rescan,subtitle=ft.ProgressBar(value=0))
@@ -830,13 +876,14 @@ async def main(wind: ft.Page):
     
     #字体大小调节
     def font_size(a):
-        global setting,music_number
+        global setting,music_number,begin
         if a==0:
             setting[2]-=1
         else:
             setting[2]+=1
         fonter.title.controls[2].value=setting[2]
-        lyrics_update(music_number)
+        if begin:
+            lyrics_update(music_number)
         fonter.update()
         
     fonter=ft.ListTile(leading=ft.Icon(ft.Icons.FORMAT_SIZE),title=ft.Row([ft.Text(text_group[25])
@@ -848,7 +895,6 @@ async def main(wind: ft.Page):
         setting[3]=None
         setting[6]=None
         wind.fonts={"kevin":None,"Kanit":None}
-        lyrics_update(music_number)
         wind.update()
         
     re_font=ft.ListTile(leading=ft.Icon(ft.Icons.FORMAT_CLEAR),
@@ -860,7 +906,6 @@ async def main(wind: ft.Page):
         if var!=[]:
             setting[3]=var[0].path
             wind.fonts={"rovin":setting[3],"Kanit":setting[6]}
-            lyrics_update(music_number)
             wind.update()
         
     lyrics_font=font_tran=ft.ListTile(title=ft.Text(text_group[28]),leading=ft.Icon(ft.Icons.SUBJECT),
@@ -881,15 +926,17 @@ async def main(wind: ft.Page):
                             on_click=font_change)
     #黑色模式
     def dark(e):
-        global setting,music_number
+        global setting,music_number,begin
         if e.control.value:
             wind.theme_mode=ft.ThemeMode.DARK
             navy.bgcolor=ft.Colors.BLACK
-            lyrics_update_dark(music_number)
+            if begin:
+                lyrics_update_dark(music_number)
         else:
             wind.theme_mode=ft.ThemeMode.LIGHT
             navy.bgcolor=color_group[0]
-            lyrics_update(music_number)
+            if begin:
+                lyrics_update(music_number)
         setting[0]=e.control.value
         wind.update()
         
@@ -919,10 +966,11 @@ async def main(wind: ft.Page):
     def faster(e):
         global setting,music_place
         setting[7]=e.control.value
-        if setting[7]:
-            list_update_fast(music_place)
-        else:
-            list_update(music_place)
+        if begin:
+            if setting[7]:
+                list_update_fast(music_place)
+            else:
+                list_update(music_place)
     fast_mode=ft.ListTile(leading=ft.Icon(ft.Icons.BOLT),subtitle=ft.Text(text_group[32]),
                                         title=ft.Text(text_group[33]),trailing=ft.Switch(value=setting[7],on_change=faster))
     #版本号
@@ -931,11 +979,67 @@ async def main(wind: ft.Page):
 
     setting_panel=ft.Column([ft.Container(blend_mode=ft.BlendMode.MODULATE,
                                           content=ft.ListView([ft.ListTile(title=ft.Text("Wind Player"),
-                                                                         leading=ft.Image(src="assets/images/windicon.ico",height=30)
+                                                                         leading=ft.Image(src="assets/icon_windows.ico",height=30)
                                                                          ),scanner,recheck,language_change,darkness
-                                                             ,koss_open,koss_deep,fast_mode,
+                                                             ,koss_open,koss_deep,liquid_open,fast_mode,
                                                              fonter,font_tran,lyrics_font,re_font,colorer,edition],scroll=ft.ScrollMode.HIDDEN),
                              bgcolor=color_group[0],border_radius=22,width=w-120,height=h-90)])
+    #初始化界面
+    async def new_load_file(e):
+        global begin
+        tar=await ft.FilePicker().get_directory_path()
+        new_scanner.subtitle.value=None
+        new_scanner.update()
+        if tar:
+            target_list=scan_files(tar)         
+            zeta=scan_all(target_list)
+            if zeta!=None:
+                with open("log.json","w",encoding="utf-8") as file:
+                    dump(zeta,file)
+                file.close()
+                begin=True
+                allnew()
+                initial_play.content.bgcolor=color_group[1]
+                initial_play.update()
+                new_scanner.subtitle.value=1
+                new_scanner.update()
+            else:
+                wind.show_dialog(warning)
+                new_scanner.subtitle.value=0
+                new_scanner.update()
+                
+    new_scanner=ft.ListTile(leading=ft.Icon(ft.Icons.FOLDER),
+                        title=ft.Text(text_group[23]),on_click=new_load_file,subtitle=ft.ProgressBar(value=0))
+    
+    welcomer=ft.ListTile(title=ft.Text(text_group[37]),leading=ft.Icon(ft.Icons.CELEBRATION),bgcolor=color_group[3])
+
+    language_change_new=ft.ListTile(leading=ft.Icon(ft.Icons.LANGUAGE),title=ft.Text(text_group[13]),
+                trailing=ft.Dropdown(width=150,value=text_group[12],border_radius=22
+                                     ,options=[ft.DropdownOption(key="简体中文", text="简体中文"),
+             ft.DropdownOption(key="English", text="English")],on_select=language_trans))
+    
+    async def new_play(e):
+        global begin
+        if begin:
+            navy.destinations=[
+                       ft.NavigationRailDestination(icon=ft.Icons.MUSIC_NOTE, label=text_group[0]),
+                       ft.NavigationRailDestination(icon=ft.Icons.REORDER,label=text_group[1]),
+                       ft.NavigationRailDestination(icon=ft.Icons.PERSON, label=text_group[2]),
+                       ft.NavigationRailDestination(icon=ft.Icons.ALBUM, label=text_group[3]),
+                       ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label=text_group[4])]
+            navy.on_change=scroll
+            navy.update()
+            await basis.jump_to_page(0)
+        else:
+            wind.show_dialog(warning)
+        
+
+    initial_play=ft.Container(content=ft.ListTile(on_click=new_play,title=ft.Text(text_group[38]),
+                                                  leading=ft.Icon(ft.Icons.LOCAL_CAFE)),border_radius=22,bgcolor=color_group[0])
+    
+    initial_panel=ft.Column([ft.Container(content=ft.ListView([welcomer,new_scanner,language_change_new,initial_play],
+                                                              spacing=10),blend_mode=ft.BlendMode.MODULATE,
+                                          bgcolor=color_group[0],border_radius=22,width=w-120,height=h-90)])
     
     
 
@@ -992,37 +1096,25 @@ async def main(wind: ft.Page):
     
     
 
-    basis=ft.PageView([page1,page2,page3,page4,page5],width=wind.window.width-80,horizontal=True,selected_index=0)
+    basis=ft.PageView([page1,page2,page3,page4,page5,initial_panel],
+                      width=wind.window.width-80,horizontal=True,selected_index=0)
     
     basic=ft.Column([area,ft.Row(controls=[ft.Column([ft.Container(content=navy,border_radius=20)],
                                         alignment=ft.MainAxisAlignment.START),
                               basis],width=wind.window.width,height=wind.window.height)])
     wind.add(basic)
-    if setting[0]:
-        wind.theme_mode=ft.ThemeMode.DARK
-        navy.bgcolor=ft.Colors.BLACK
-    if begin:
-        now_update(music_place)
-        album_update()
-        artist_update()
-        renew()
-        if setting[7]:
-            list_update_fast(music_place)
-            item_update_fast()
-        else:
-            list_update(music_place)
-            item_update()
-   
-    else:
-        await basis.jump_to_page(4)
-        navy.selected_index=4
-        navy.update()
-        
+    
+    
+    
     def must(e):
         with open("set.json","w",encoding="utf-8") as file:
             dump(setting,file)
         mixer.music.stop()
+        set_path=Path("log.json")
+        if not begin and set_path.exists():
+            Path.unlink(set_path)
         quit()
+        
     wind.on_close=must
 
     def color_update():
@@ -1050,11 +1142,16 @@ async def main(wind: ft.Page):
         wind.update()
         
     def text_update():
-        navy.destinations[0].label=text_group[0]
-        navy.destinations[1].label=text_group[1]
-        navy.destinations[2].label=text_group[2]
-        navy.destinations[3].label=text_group[3]
-        navy.destinations[4].label=text_group[4]
+        if not begin:
+            navy.destinations[0].label=text_group[0]
+            navy.destinations[1].label=text_group[1]
+            navy.destinations[2].label=text_group[2]
+            navy.destinations[3].label=text_group[3]
+            navy.destinations[4].label=text_group[4]
+        else:
+            welcomer.title.value=text_group[37]
+            new_scanner.title.value=text_group[23]
+            language_change_new.title.value=text_group[13]
         delete_banner.content.controls[0].title.value=text_group[9]
         search_button.bar_hint_text=text_group[11]
         seque.content.items[0].content.value=text_group[14]
@@ -1079,6 +1176,10 @@ async def main(wind: ft.Page):
         colorer.title.controls[0].value=text_group[31]
         fast_mode.subtitle.value=text_group[32]
         fast_mode.title.value=text_group[33]
+        edition.title.value=text_group[34]
+        warning.content.title.value=text_group[35]
+        liquid_open.title.value=text_group[36]
+        initial_play.content.title.value=text_group[38]
         wind.update()
     def resize(e):
         global w,h
@@ -1120,17 +1221,52 @@ async def main(wind: ft.Page):
         artist_photo.controls[2].width=h*0.6
         artist_page.controls[0].width=w-120
         artist_page.controls[0].height=h-90
-        
-        
-        
+        album_grid.width=w-120
+        album_grid.height=h-144
+        album_grid.cache_extent=h-144
+        album_panel.controls[0].width=w-120
+        album_panel.controls[1].width=w-120
+        album_main.width=w-h*0.6-130
+        album_main.height=h-90
+        album_photo.controls[0].width=h*0.6
+        album_photo.controls[0].height=h*0.6
+        album_photo.controls[1].width=h*0.6
+        album_photo.controls[2].content.controls[0].width=h*0.3
+        album_photo.controls[2].content.controls[1].width=h*0.3
+        album_photo.controls[2].width=h*0.6
+        album_page.controls[0].width=w-120
+        album_page.controls[0].height=h-90
+        setting_panel.controls[0].width=w-120
+        setting_panel.controls[0].height=h-90
+        initial_panel.controls[0].height=h-90
+        initial_panel.controls[0].width=w-120
         wind.update()
-        
     wind.on_resize=resize
+
+    if begin:
+        now_update(music_place)
+        album_update()
+        artist_update()
+        renew()
+        if setting[7]:
+            list_update_fast(music_place)
+            item_update_fast()
+        else:
+            list_update(music_place)
+            item_update()
+    else:
+        navy.destinations=[ft.NavigationRailDestination(icon=ft.Icons.CELEBRATION, label="")]
+        navy.on_change=None
+        await basis.jump_to_page(6)
+        navy.selected_index=0
+        navy.update()
+        
         
 
     
-
-ft.run(main)
+if __name__ == "__main__":
+    ft.run(main)
 """
 待维修清单
-歌词字体无法单独更改"""
+歌词字体无法单独更改
+载入的初始界面"""
