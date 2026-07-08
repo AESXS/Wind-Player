@@ -1,5 +1,4 @@
 import flet as ft
-from pygame import mixer
 from time import time
 from random import randint
 from tinytag import TinyTag
@@ -7,6 +6,9 @@ from pathlib import Path
 from asyncio import sleep
 from json import dump,load
 from module.manager import scan_files,scan_all,scan_detail,convert,unconvert
+import _cffi_backend
+from just_playback import Playback
+
 
 
 #封面提取
@@ -19,7 +21,7 @@ def album_get(path):
         return "assets/images/nothing.jpg"
 
 #初始化
-setting=[False,False,18,None,0,[],None,True,0,False,0,False]
+setting=[False,False,18,None,0,[],None,True,0,False,0,False,0.5]
 set_path=Path("set.json")
 if set_path.exists():
     with open("set.json","r",encoding="utf-8") as log:
@@ -30,15 +32,15 @@ text_group_list=[["播放界面","歌曲列表","艺术家","专辑","设置","�
                   "歌曲","搜索","简体中文","语言/language","按文件夹排序","按时间升序","按时间降序","按歌曲名升序","按歌曲名降序",
                   "播放此列表","歌词界面是否打开高斯模糊","无色歌词界面","歌词界面更加通透",
                   "载入音乐文件夹","重新扫描文件","歌词文字大小调节","恢复默认字体","重启后生效","设置歌词字体","设置全局字体",
-                  "深色模式","配色方案","限制列表长度","极速模式","版本号:1.00","祈祷中!出现错误(QAQ)","液态按钮",
-                  "欢迎使用Wind player! 请先完成以下设置","即刻体验"],
+                  "深色模式","配色方案","限制列表长度","极速模式","版本号:1.01","祈祷中!出现错误(QAQ)","液态按钮",
+                  "欢迎使用Wind player! 请先完成以下设置","即刻体验","音量调节","40"],
                  ["playing","playlist","artsit","album","setting","Sampling rate&bit rate","not have lyrics","A",
-                  "B","search","song","artsit","English","language/语言","order with folder","order with time",
+                  "B","delete","song","search","English","language/语言","order with folder","order with time",
                   "descending order with time","order with name","descending order with name",
                   "play this list","koss blur mode","pure lyrics interface","more transparent interface",
                   "load music folder","rescan files","set lyrics font size","reset font type","restart to use","set lyrics font","set font",
-                  "dark mode","color palette","limit list length","fast mode","version:1.00","error","liquid button",
-                  "welcome to use Windplayer! Please achive the trailing setting","into play"]]
+                  "dark mode","color palette","limit list length","fast mode","version:1.01","error","liquid button",
+                  "welcome to use Windplayer! Please achive the trailing setting","into play","volume","40"]]
 
 text_group=text_group_list[setting[10]]
 
@@ -48,8 +50,7 @@ color_group_list=[[ft.Colors.INDIGO_50,ft.Colors.INDIGO_100,ft.Colors.BLUE_50,ft
                   [ft.Colors.BLUE_50,ft.Colors.BLUE_100,ft.Colors.INDIGO_50,ft.Colors.INDIGO_100]
                   ,[ft.Colors.YELLOW_50,ft.Colors.YELLOW_100,ft.Colors.ORANGE_50,ft.Colors.ORANGE_100],
                   [ft.Colors.PINK_50,ft.Colors.PINK_100,ft.Colors.RED_50,ft.Colors.RED_100]]
-color_group=color_group_list[setting[8]]
-mixer.init()        
+color_group=color_group_list[setting[8]]   
 cursor=0        
 set_path=Path("log.json")
 if set_path.exists():
@@ -99,6 +100,10 @@ def get_lyrics(num):
     else:
         lyrics_list=["[00:00.00]"+text_group[6]]
         
+audio=Playback()
+audio.set_volume(setting[12])
+full=True
+glob_time=0
 #主程序
 async def main(wind: ft.Page):
     global music_number,begin
@@ -115,29 +120,46 @@ async def main(wind: ft.Page):
     wind.window.title_bar_hidden=True
     w=wind.window.width
     h=wind.window.height
+    wind.shadow=False
+    wind.window.shadow=None
     wind.spacing=0
      
 #初始化
     def renew():        
         global music_number
+        audio.load_file(data_list[music_number])
+        audio.play()
+        if not player.selected:
+            audio.pause()
         title_update(music_number)
-        mixer.music.load(data_list[music_number])
-        mixer.music.play()
+        photo.content=ft.Image(src=album_get(data_list[music_number])
+                                     ,cache_width=1000,cache_height=1000,width=h*0.5,height=h*0.5,border_radius=22)
         if setting[0]:
             lyrics_update_dark(music_number)
         else:
             lyrics_update(music_number)
+        if setting[1]:
+            back.src=album_get(data_list[music_number])
+            back.update()
         alltime.value=convert(int(tag_list[4][music_number])*1000)
         timer.max=int(tag_list[4][music_number])*1000
         timer.value=0
         wastetime.value="00:00"
-        if not player.selected:
-            mixer.music.pause()
-        photo.content=ft.Image(src=album_get(data_list[music_number])
-                                     ,cache_width=1000,cache_height=1000,width=h*0.5,height=h*0.5,border_radius=22)
-        if setting[1]:
-            back.src=album_get(data_list[music_number])
-        wind.update()
+        photo.update()
+        lyrics_display.update()
+        alltime.update()
+        wastetime.update()
+
+    def mini_new():
+        global glob_time
+        audio.load_file(data_list[music_number])
+        audio.play()
+        glob_time=0
+        get_lyrics(music_number)
+        title_small.value=music_list[music_number]
+        title_small.update()
+
+    
 #完全初始化
     def allnew():
         global cursor,music_number,file_list,index_list,artist_list,data_list,tag_list,album_list,time_list,music_list,music_place,begin
@@ -152,7 +174,6 @@ async def main(wind: ft.Page):
                 album_list=file_list[4]
                 time_list=file_list[5]
             music_list=tag_list[0]
-            mixer.init()
             music_place=[i for i in range(0,len(data_list))]    
             if setting[4]==1:
                 music_place.sort(key=lambda e: time_list[e])
@@ -210,18 +231,21 @@ async def main(wind: ft.Page):
         player.selected=not player.selected
         player.update()
         if player.selected:
-            mixer.music.unpause() 
-            mixer.music.set_pos(timer.value*0.001)
+            audio.resume() 
+            audio.seek(timer.value*0.001)
             await lyrics_sync()
         else:
-            mixer.music.pause()
+            audio.pause()
     #切换
     def flow(orient):
-        global music_number,cursor
+        global music_number,cursor,full
         cursor=now_list[cursor][orient]
         music_number=now_list[cursor][0]
         wind.drawer.selected_index=cursor
-        renew()
+        if full:
+            renew()
+        else:
+            mini_new()
         
     #歌词
     def lyrics_update(num):
@@ -245,7 +269,7 @@ async def main(wind: ft.Page):
     async def lyrics_choice(e):
         global lyrics_number,h
         z=lyrics_list[e.control.data]
-        mixer.music.set_pos(unconvert(z[1:9])*0.001)
+        audio.seek(unconvert(z[1:9])*0.001)
         timer.value=unconvert(z[1:9])
         lyrics_display.controls[lyrics_number].selected=False
         lyrics_number=e.control.data
@@ -254,32 +278,44 @@ async def main(wind: ft.Page):
                                  ,duration=100)
     #歌词同步
     async def lyrics_sync():
-        global lyrics_number,lyrics_list,h
+        global lyrics_number,lyrics_list,h,full,glob_time
         last=int(time()*1000)
         while player.selected==True:
-           await sleep(0.1)
-           if mixer.music.get_busy():
-               if timer.value+int(time()*1000)-last<timer.max-100:
-                  timer.value=timer.value+int(time()*1000)-last
-                  last=int(time()*1000)
-                  timer.update()
-                  wastetime.update()
-               else:
-                    modeking()
-           if navy.selected_index==0 and not lyrics_photo.selected:
-               wastetime.value=convert(int(timer.value))
-               if lyrics_number<len(lyrics_list)-1:
-                   if unconvert(lyrics_list[lyrics_number+1][1:9])<timer.value:
-                       lyrics_display.controls[lyrics_number].selected=False
-                       lyrics_number=min(lyrics_number+1,len(lyrics_display.controls)-1)
-                       lyrics_display.controls[lyrics_number].selected=True
-                       await lyrics_display.scroll_to(
-                           offset=max(lyrics_number*(setting[2]*2.5)-0.5*((h*0.7)),0),duration=300)
-                       lyrics_display.update()
+            await sleep(0.1)
+            if audio.active:
+                if full:
+                    if timer.value+int(time()*1000)-last<timer.max-100:
+                        timer.value=timer.value+int(time()*1000)-last
+                        last=int(time()*1000)
+                        timer.update()
+                        wastetime.update()
+                else:
+                    glob_time=glob_time+int(time()*1000)-last
+                    last=int(time()*1000)                  
+            else:
+                modeking()
+            if full:
+                if navy.selected_index==0:
+                    wastetime.value=convert(int(timer.value))
+                    if lyrics_number<len(lyrics_list)-1:
+                        if unconvert(lyrics_list[lyrics_number+1][1:9])<timer.value:
+                            if not lyrics_photo.selected:         
+                                lyrics_display.controls[lyrics_number].selected=False
+                                lyrics_number=min(lyrics_number+1,len(lyrics_display.controls)-1)
+                                lyrics_display.controls[lyrics_number].selected=True
+                                await lyrics_display.scroll_to(
+                                    offset=max(lyrics_number*(setting[2]*2.5)-0.5*((h*0.7)),0),duration=300)
+                                lyrics_display.update()
+            else:
+                if lyrics_number<len(lyrics_list)-1:
+                    if unconvert(lyrics_list[lyrics_number+1][1:9])<glob_time:
+                        lyrics_number=min(lyrics_number+1,len(lyrics_display.controls)-1)
+                        mini_lyrics.value=lyrics_list[lyrics_number].split("]")[1]
+                        mini_lyrics.update()
     #进度条
     async def time_use(e):
         global lyrics_number,lyrics_list,h
-        mixer.music.set_pos(timer.value*0.001)
+        audio.seek(timer.value*0.001)
         wastetime.value=convert(int(timer.value))
         for i in range(len(lyrics_list)):
             if unconvert(lyrics_list[i][1:9])<=timer.value and not lyrics_photo.selected:
@@ -292,17 +328,19 @@ async def main(wind: ft.Page):
         wastetime.update()
     #模式切换
     def modeking():
-        global music_number
+        global music_number,lyrics_number
         if mode.data==0:
             flow(-1)
         elif mode.data==1:
-            mixer.music.rewind()
+            audio.play()
+            lyrics_number=0
             timer.value=0
         else:
-            mixer.music.pause()
+            audio.pause()
             player.selected=False
             timer.value=0
             player.update()
+            lyrics_number=0
     def mode_change(e):
         n=[1,2,0]
         p=[ft.Icons.SKIP_NEXT,ft.Icons.REPEAT_ONE,ft.Icons.PAUSE_CIRCLE]
@@ -387,8 +425,22 @@ async def main(wind: ft.Page):
     def item_update_fast():
         global now_list
         wind.drawer.controls=[]
-        for i in now_list[0:min(len(now_list),100)-1]:
+        for i in now_list[0:min(len(now_list),100)]:
            wind.drawer.controls.append(ft.NavigationDrawerDestination(label=music_list[i[0]],icon=ft.Icons.HEADPHONES))
+    #音量调节
+    def volve(e):
+        wind.show_dialog(volve_banner)
+    def volv(e):
+        global setting
+        audio.set_volume(e.control.value*0.01)
+        setting[12]=e.control.value*0.01
+        
+    volume=ft.IconButton(ft.Icons.VOLUME_UP,on_click=volve)
+                        
+
+    volve_banner=ft.AlertDialog(content=ft.ListTile(title=ft.Text(text_group[39])),actions=[ft.Slider(width=200,max=100,
+                                                                   value=setting[12]*100,on_change=volv,divisions=100)])
+    wind.add(volve_banner)
         
 
     #歌词封面转换
@@ -422,7 +474,6 @@ async def main(wind: ft.Page):
     wind.drawer=ft.NavigationDrawer(controls=[],on_change=item_choice)
     title_banner=ft.BottomSheet(content=ft.ListView())
     wind.add(title_banner)
-    
     playitem=ft.IconButton(icon=ft.Icons.QUEUE_MUSIC,on_click=exp)
     
     
@@ -455,7 +506,8 @@ async def main(wind: ft.Page):
     
     lyrics_display=ft.ListView(width=w-210-h*0.5,height=h*0.5+140,scroll=ft.ScrollMode.HIDDEN)
 
-    control1=ft.Container(content=ft.Row([mode,random_mode,playitem,lyrics_photo],alignment=ft.MainAxisAlignment.CENTER),
+    control1=ft.Container(content=ft.Row([mode,random_mode,playitem,lyrics_photo,volume],
+                                         alignment=ft.MainAxisAlignment.CENTER),
                           border_radius=22,width=h*0.5,
                                blend_mode=ft.BlendMode.MODULATE,bgcolor=ft.Colors.GREY_100)
     
@@ -520,8 +572,31 @@ async def main(wind: ft.Page):
                                                  trailing=ft.PopupMenuButton(content=ft.Icon(ft.Icons.MENU),items=[
                                                      ft.PopupMenuItem(content=ft.Row([ft.Icon(ft.Icons.DELETE),ft.Text(text_group[9])]),
                                                                       on_click=music_delete,data=i)])))
+    #文件夹播放
             
+    folder_edge=ft.Container(blend_mode=ft.BlendMode.MODULATE,
+                       content=ft.PopupMenuButton(content=ft.Icon(ft.Icons.FOLDER_OPEN),items=[]),
+                      bgcolor=color_group[1],border_radius=15,width=54,height=44)
+    
+    def folder_update():
+        folder_edge.content.items=[]
+        for i in range(len(index_list)):
+            folder_edge.content.items.append(ft.PopupMenuItem(content=ft.Text(index_list[i][0]),on_click=folder_play,data=i))
 
+    def folder_play(e):
+        global music_number,now_list,cursor
+        now_update([i for i in range(index_list[e.control.data][1],index_list[e.control.data][2])])
+        if setting[7]:
+            item_update_fast()
+        else:
+            item_update()
+        cursor=0
+        music_number=now_list[cursor][0]
+        random_mode.selected=False
+        renew()
+
+    
+        
     #播放全部
     def all_play(e):
         global now_list,cursor,music_number
@@ -533,12 +608,13 @@ async def main(wind: ft.Page):
         cursor=0
         music_number=now_list[cursor][0]
         renew()
+
         
     sword=ft.Container(blend_mode=ft.BlendMode.MODULATE,
                        content=ft.Row([ft.ListTile(title=ft.Icon(icon=ft.Icons.AUDIOTRACK),on_click=all_play,width=60)],
                                       alignment=ft.MainAxisAlignment.CENTER),
                      border_radius=15,width=60,height=44,
-                               bgcolor=color_group[3])
+                               bgcolor=color_group[2])
 
     #歌曲搜索
     async def search_choice(e):
@@ -631,12 +707,13 @@ async def main(wind: ft.Page):
             ft.PopupMenuItem(content=ft.Text(text_group[16]),on_click=lambda e:order(2)),
         ft.PopupMenuItem(content=ft.Text(text_group[17]),on_click=lambda e:order(3)),
         ft.PopupMenuItem(content=ft.Text(text_group[18]),on_click=lambda e:order(4))]),
-                      bgcolor=color_group[1],border_radius=15,width=54,height=44)
+                      bgcolor=color_group[3],border_radius=15,width=54,height=44)
     
         
     playlist=ft.ListView(height=h-144,width=w-120,spacing=5,cache_extent=h-144)
     
-    list_panel=ft.Column([ft.Container(blend_mode=ft.BlendMode.MODULATE,content=ft.Row([search_button,sword,seque]),
+    list_panel=ft.Column([ft.Container(blend_mode=ft.BlendMode.MODULATE,
+                                       content=ft.Row([search_button,sword,seque,folder_edge]),
                                        width=w-120,bgcolor=color_group[0],height=44
                                        ,border_radius=30)
                           ,ft.Container(blend_mode=ft.BlendMode.MODULATE,
@@ -973,6 +1050,8 @@ async def main(wind: ft.Page):
                 list_update(music_place)
     fast_mode=ft.ListTile(leading=ft.Icon(ft.Icons.BOLT),subtitle=ft.Text(text_group[32]),
                                         title=ft.Text(text_group[33]),trailing=ft.Switch(value=setting[7],on_change=faster))
+
+    
     #版本号
     edition=ft.ListTile(leading=ft.Icon(ft.Icons.LAPTOP),title=ft.Text(text_group[34]))
     
@@ -982,7 +1061,8 @@ async def main(wind: ft.Page):
                                                                          leading=ft.Image(src="assets/icon_windows.ico",height=30)
                                                                          ),scanner,recheck,language_change,darkness
                                                              ,koss_open,koss_deep,liquid_open,fast_mode,
-                                                             fonter,font_tran,lyrics_font,re_font,colorer,edition],scroll=ft.ScrollMode.HIDDEN),
+                                                             fonter,font_tran,lyrics_font,re_font,
+                                                               colorer,edition],scroll=ft.ScrollMode.HIDDEN),
                              bgcolor=color_group[0],border_radius=22,width=w-120,height=h-90)])
     #初始化界面
     async def new_load_file(e):
@@ -1059,7 +1139,7 @@ async def main(wind: ft.Page):
     async def close(e): 
         with open("set.json","w",encoding="utf-8") as file:
             dump(setting,file)
-        mixer.music.stop()
+        audio.stop()
         await wind.window.close()
         quit()
           
@@ -1081,11 +1161,51 @@ async def main(wind: ft.Page):
             
     wind.on_keyboard_event=on_key
     
+#小窗模式
+    def open_window(e):
+        global full,setting,glob_time
+        glob_time=timer.value
+        full=False
+        wind.clean()
+        wind.window.width=500
+        wind.window.height=100
+        wind.add(ft.WindowDragArea(ft.ListView([small_line,mini_lyrics]),maximizable=False))
+        title_small.value=music_list[music_number]
+        title_small.update()
+        wind.window.always_on_top=True
+        wind.update()
+        
+
+    def del_small(e):
+        global full
+        wind.clean()
+        wind.window.width=1280
+        wind.window.height=720
+        wind.window.always_on_top=False
+        wind.add(basic)
+        wind.update()
+        full=True
+        
+        
+    small_window=ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN,on_click=open_window)
+
+    title_small=ft.Text(music_list[music_number],width=100)
+
+    small_back=ft.IconButton(icon=ft.Icons.ARROW_DROP_UP,on_click=del_small)
+
+    mini_lyrics=ft.Text(value="loading",width=480,size=20)
+        
+    
 #功能栏
     task_line=ft.Container(blend_mode=ft.BlendMode.MODULATE,
-                           content=ft.Row([xiao,da,qu],alignment=ft.MainAxisAlignment.END,height=40,width=w-30),
+                           content=ft.Row([small_window,xiao,da,qu],alignment=ft.MainAxisAlignment.END,height=40,width=w-30),
                            bgcolor=color_group[0],border_radius=22)
-    area=ft.WindowDragArea(ft.Container(task_line),maximizable=False)
+    
+    area=ft.WindowDragArea(task_line,maximizable=False)
+
+    small_line=ft.Container(blend_mode=ft.BlendMode.MODULATE,
+                           content=ft.Row([upper,player,downer,title_small,small_back,qu],alignment=ft.MainAxisAlignment.END,height=40,width=w-30),
+                           bgcolor=color_group[0],border_radius=22)
     
 #封装
     page1=ft.ListView(controls=[goss])
@@ -1109,7 +1229,7 @@ async def main(wind: ft.Page):
     def must(e):
         with open("set.json","w",encoding="utf-8") as file:
             dump(setting,file)
-        mixer.music.stop()
+        audio.stop()
         set_path=Path("log.json")
         if not begin and set_path.exists():
             Path.unlink(set_path)
@@ -1119,8 +1239,8 @@ async def main(wind: ft.Page):
 
     def color_update():
         navy.bgcolor=color_group[0]
-        sword.bgcolor=color_group[3]
-        seque.bgcolor=color_group[1]
+        sword.bgcolor=color_group[2]
+        seque.bgcolor=color_group[3]
         list_panel.controls[0].bgcolor=color_group[0]
         list_panel.controls[1].bgcolor=color_group[0]
         artist_panel.controls[0].bgcolor=color_group[1]
@@ -1136,6 +1256,7 @@ async def main(wind: ft.Page):
         artist_page.controls[0].bgcolor=color_group[0]
         album_page.controls[0].bgcolor=color_group[0]
         setting_panel.controls[0].bgcolor=color_group[0]
+        folder_edge.bgcolor=color_group[1]
         task_line.bgcolor=color_group[0]
         if not setting[9]:
             koss.bgcolor=color_group[0]
@@ -1152,7 +1273,7 @@ async def main(wind: ft.Page):
             welcomer.title.value=text_group[37]
             new_scanner.title.value=text_group[23]
             language_change_new.title.value=text_group[13]
-        delete_banner.content.controls[0].title.value=text_group[9]
+        delete_banner.content.title.value=text_group[9]
         search_button.bar_hint_text=text_group[11]
         seque.content.items[0].content.value=text_group[14]
         seque.content.items[1].content.value=text_group[15]
@@ -1180,6 +1301,7 @@ async def main(wind: ft.Page):
         warning.content.title.value=text_group[35]
         liquid_open.title.value=text_group[36]
         initial_play.content.title.value=text_group[38]
+        volve_banner.content.title.value=text_group[39]
         wind.update()
     def resize(e):
         global w,h
@@ -1247,6 +1369,7 @@ async def main(wind: ft.Page):
         now_update(music_place)
         album_update()
         artist_update()
+        folder_update()
         renew()
         if setting[7]:
             list_update_fast(music_place)
