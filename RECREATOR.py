@@ -48,8 +48,9 @@ color_group_list=[[ft.Colors.INDIGO_50,ft.Colors.INDIGO_100,ft.Colors.BLUE_50,ft
                   [ft.Colors.GREEN_50,ft.Colors.GREEN_100,ft.Colors.CYAN_50,ft.Colors.CYAN_100],
                   [ft.Colors.CYAN_50,ft.Colors.CYAN_100,ft.Colors.BLUE_50,ft.Colors.BLUE_100],
                   [ft.Colors.BLUE_50,ft.Colors.BLUE_100,ft.Colors.INDIGO_50,ft.Colors.INDIGO_100]
-                  ,[ft.Colors.YELLOW_50,ft.Colors.YELLOW_100,ft.Colors.ORANGE_50,ft.Colors.ORANGE_100],
-                  [ft.Colors.PINK_50,ft.Colors.PINK_100,ft.Colors.RED_50,ft.Colors.RED_100]]
+                  ,[ft.Colors.PINK_50,ft.Colors.PINK_100,ft.Colors.RED_50,ft.Colors.RED_100],
+                  [ft.Colors.ORANGE_50,ft.Colors.ORANGE_100,ft.Colors.RED_50,ft.Colors.RED_100],
+                  [ft.Colors.YELLOW_50,ft.Colors.YELLOW_100,ft.Colors.ORANGE_50,ft.Colors.ORANGE_100],]
 color_group=color_group_list[setting[8]]   
 cursor=0        
 set_path=Path("log.json")
@@ -151,7 +152,7 @@ async def main(wind: ft.Page):
         wastetime.update()
 
     def mini_new():
-        global glob_time
+        global glob_time,music_number
         audio.load_file(data_list[music_number])
         audio.play()
         glob_time=0
@@ -232,7 +233,6 @@ async def main(wind: ft.Page):
         player.update()
         if player.selected:
             audio.resume() 
-            audio.seek(timer.value*0.001)
             await lyrics_sync()
         else:
             audio.pause()
@@ -912,7 +912,9 @@ async def main(wind: ft.Page):
     liquid_open=ft.ListTile(leading=ft.Icon(ft.Icons.MOTION_PHOTOS_ON)
                           ,title=ft.Text(text_group[36]),trailing=ft.Switch(value=setting[11],on_change=liquid_on))
     #文件夹重载
-    async def rescan(e):
+    def rescan(e):
+        wind.window.progress_bar=0.5
+        wind.update()
         if begin:
             target_list=[Path(i[0]) for i in index_list]
             recheck.subtitle.value=None
@@ -1036,9 +1038,11 @@ async def main(wind: ft.Page):
                                                       ft.IconButton(data=3,on_click=color_change,
                                                           icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.BLUE_100,),
                                                       ft.IconButton(data=4,on_click=color_change,
-                                                          icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.YELLOW_100),
+                                                          icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.PINK_100),
                                                       ft.IconButton(data=5,on_click=color_change,
-                                                          icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.PINK_100,)]))
+                                                          icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.ORANGE_100,),
+                                                                           ft.IconButton(data=6,on_click=color_change,
+                                                          icon=ft.Icons.COLORIZE,bgcolor=ft.Colors.YELLOW_100),]))
     #极速模式
     def faster(e):
         global setting,music_place
@@ -1163,36 +1167,52 @@ async def main(wind: ft.Page):
     
 #小窗模式
     def open_window(e):
-        global full,setting,glob_time
-        glob_time=timer.value
-        full=False
-        wind.clean()
-        wind.window.width=500
-        wind.window.height=100
-        wind.add(ft.WindowDragArea(ft.ListView([small_line,mini_lyrics]),maximizable=False))
-        title_small.value=music_list[music_number]
-        title_small.update()
-        wind.window.always_on_top=True
-        wind.update()
+        global full,setting,glob_time,begin
+        if begin:
+            glob_time=timer.value
+            full=False
+            wind.clean()
+            wind.window.width=500
+            wind.window.height=100
+            wind.add(ft.WindowDragArea(ft.ListView([small_line,mini_lyrics]),maximizable=False))
+            title_small.value=music_list[music_number]
+            title_small.update()
+            wind.window.always_on_top=True
+            wind.update()
         
 
     def del_small(e):
-        global full
+        global full,music_number,glob_time
         wind.clean()
         wind.window.width=1280
         wind.window.height=720
         wind.window.always_on_top=False
         wind.add(basic)
         wind.update()
+        if not player.selected:
+            audio.pause()
+        title_update(music_number)
+        photo.content=ft.Image(src=album_get(data_list[music_number])
+                                     ,cache_width=1000,cache_height=1000,width=h*0.5,height=h*0.5,border_radius=22)
+        if setting[0]:
+            lyrics_update_dark(music_number)
+        else:
+            lyrics_update(music_number)
+        if setting[1]:
+            back.src=album_get(data_list[music_number])
+            back.update()
+        alltime.value=convert(int(tag_list[4][music_number])*1000)
+        timer.max=int(tag_list[4][music_number])*1000
+        timer.value=glob_time
+        photo.update()
+        lyrics_display.update()
+        alltime.update()
         full=True
         
         
     small_window=ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN,on_click=open_window)
-
-    title_small=ft.Text(music_list[music_number],width=100)
-
+    title_small=ft.Text(width=200)
     small_back=ft.IconButton(icon=ft.Icons.ARROW_DROP_UP,on_click=del_small)
-
     mini_lyrics=ft.Text(value="loading",width=480,size=20)
         
     
@@ -1203,9 +1223,8 @@ async def main(wind: ft.Page):
     
     area=ft.WindowDragArea(task_line,maximizable=False)
 
-    small_line=ft.Container(blend_mode=ft.BlendMode.MODULATE,
-                           content=ft.Row([upper,player,downer,title_small,small_back,qu],alignment=ft.MainAxisAlignment.END,height=40,width=w-30),
-                           bgcolor=color_group[0],border_radius=22)
+    small_line=ft.Container(content=ft.Row([upper,player,downer,title_small,small_back,qu],
+                                           alignment=ft.MainAxisAlignment.END,height=40,width=w-30),)
     
 #封装
     page1=ft.ListView(controls=[goss])
